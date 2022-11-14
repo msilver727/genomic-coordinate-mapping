@@ -1,5 +1,6 @@
 import argparse
 import re
+import os
 
 
 # Break the CIGAR string into each component part
@@ -65,6 +66,12 @@ def get_converted_position(transcript_info, requested_pos, reverse_orientation=F
 def translate_coordinates(transcripts_input_p, queries_input_p, output_file_p, reverse_orientation, start_from_genomic):
     """ Given two input files, one containing information about various transcripts and another containing information
     regarding a requested coordinate within a transcript, output the set of translated coordinates."""
+
+    # Validate that the input file paths point to actual files
+    if not os.path.exists(transcripts_input_p):
+        raise Exception('Invalid transcripts input path provided, {} does not point to a valid file.'.format(transcripts_input_p))
+    if not os.path.exists(queries_input_p):
+        raise Exception('Invalid queries input path provided, {} does not point to a valid file.'.format(queries_input_p))
 
     # Collect info from transcripts input into a dictionary of each transcript
     transcripts = {}
