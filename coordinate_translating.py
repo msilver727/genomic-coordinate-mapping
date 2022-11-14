@@ -8,19 +8,17 @@ import os
 cigar_pttn = re.compile(r'(\d+)([MXDIN])')
 
 
-def get_converted_position(transcript_info, requested_pos, reverse_orientation=False, start_from_genomic=False):
+def get_converted_position(transcript_info, requested_pos, start_from_genomic=False):
     """ Convert from requested position in one coordinate system to corresponding position in the opposite coordinate system.
     By default, convert from transcript position to a corresponding genomic position, but pass
     start_from_genomic=True to convert from genomic position to a corresponding transcript position.
-    Can pass reverse_orientation=True to use 3' to 5' instead of the default of 5' to 3'
     """
 
     # Each segment consisting of a segment length and cigar type
     parsed_cigar = cigar_pttn.findall(transcript_info['cigar'])
 
-    # If reverse orientation is requested, just reverse the cigar segments
-    # NOTE: does not account for potentially different transcript starting position
-    if reverse_orientation:
+    # If reverse orientation is requested for the transcript, just reverse the cigar segments to treat the transcript as 3' to 5'
+    if transcript_info['orientation'] == 'reverse':
         parsed_cigar = parsed_cigar[::-1]
 
     # Use the starting point of the transcript as the initial genomic position
@@ -64,7 +62,7 @@ def get_converted_position(transcript_info, requested_pos, reverse_orientation=F
     return final_pos_of_interest
 
 
-def translate_coordinates(transcripts_input_p, queries_input_p, output_file_p, reverse_orientation, start_from_genomic):
+def translate_coordinates(transcripts_input_p, queries_input_p, output_file_p, start_from_genomic):
     """ Given two input files, one containing information about various transcripts and another containing information
     regarding a requested coordinate within a transcript, output the set of translated coordinates."""
 
@@ -81,11 +79,19 @@ def translate_coordinates(transcripts_input_p, queries_input_p, output_file_p, r
             cols = row.strip().split('\t')
 
             # Validate that the right number of columns were provided
-            if len(cols) != 4:
-                raise Exception('Invalid transcripts input provided. Expecting 4 columns, received {} columns.'.format(len(cols)))
+            if len(cols) not in (4, 5):
+                raise Exception('Invalid transcripts input provided. Expecting 4 or 5 columns, received {} columns.'.format(len(cols)))
 
             # Grab data from the columns
-            transcript_name, chrom, start, cigar = cols
+            if len(cols) == 4:
+                transcript_name, chrom, start, cigar = cols
+                # If only 4 columns are provided (the default), assume forward orientation (5' to 3')
+                orientation = 'forward'
+            else:
+                # If orientation is provided as a fifth column in the input, validate that it is provided in the expected format
+                transcript_name, chrom, start, cigar, orientation = cols
+                if orientation not in ('forward', 'reverse'):
+                    raise Exception('Invalid orientation of `{}` provided, must be either `forward` or `reverse`.'.format(orientation))
 
             # Validate that the start is an integer
             try:
@@ -97,7 +103,7 @@ def translate_coordinates(transcripts_input_p, queries_input_p, output_file_p, r
             if transcript_name in transcripts:
                 raise Exception('Duplicate transcripts provided, each transcript should be unique')
 
-            transcripts[transcript_name] = {'chrom': chrom, 'start': start, 'cigar': cigar}
+            transcripts[transcript_name] = {'chrom': chrom, 'start': start, 'cigar': cigar, 'orientation': orientation}
 
     # Read through queries input to translate each requested position into the opposite coordinate system
     with open(queries_input_p) as queries_input, open(output_file_p, 'w') as output_file:
@@ -124,8 +130,7 @@ def translate_coordinates(transcripts_input_p, queries_input_p, output_file_p, r
 
             # Convert the requested position from its original coordinate system to the opposite coordinate system
             # (default is to go from transcript coordinate to genomic coordinate, but vice versa is also possible)
-            converted_pos = get_converted_position(transcript_info, requested_pos,
-                                                   reverse_orientation=reverse_orientation, start_from_genomic=start_from_genomic)
+            converted_pos = get_converted_position(transcript_info, requested_pos, start_from_genomic=start_from_genomic)
 
             # Combine all of the outputs together and write to the output file
             output = cols + [transcript_info['chrom'], str(converted_pos)]
@@ -137,9 +142,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--transcripts_input_p', default='inputs/transcripts_inputs.tsv', help='Path of the transcripts input file.')
     parser.add_argument('-q', '--queries_input_p', default='inputs/queries_inputs.tsv', help='Path of the queries input file.')
     parser.add_argument('-o', '--output_file_p', default='outputs/output.tsv', help='Path of the output file.')
-    parser.add_argument('-r', '--reverse_orientation', action='store_true',
-                        help="Optionally choose reverse orientation to indicate 3' to 5' instead of the default of 5' to 3'")
     parser.add_argument('-g', '--start_from_genomic', action='store_true',
                         help='Optionally convert from genomic coordinate to transcript coordinate instead of the default conversion of transcript to genomic')
     args = parser.parse_args()
-    translate_coordinates(args.transcripts_input_p, args.queries_input_p, args.output_file_p, args.reverse_orientation, args.start_from_genomic)
+    translate_coordinates(args.transcripts_input_p, args.queries_input_p, args.output_file_p, args.start_from_genomic)
