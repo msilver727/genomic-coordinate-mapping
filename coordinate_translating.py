@@ -62,17 +62,8 @@ def get_converted_position(transcript_info, requested_pos, start_from_genomic=Fa
     return final_pos_of_interest
 
 
-def translate_coordinates(transcripts_input_p, queries_input_p, output_file_p, start_from_genomic):
-    """ Given two input files, one containing information about various transcripts and another containing information
-    regarding a requested coordinate within a transcript, output the set of translated coordinates."""
-
-    # Validate that the input file paths point to actual files
-    if not os.path.exists(transcripts_input_p):
-        raise Exception('Invalid transcripts input path provided, {} does not point to a valid file.'.format(transcripts_input_p))
-    if not os.path.exists(queries_input_p):
-        raise Exception('Invalid queries input path provided, {} does not point to a valid file.'.format(queries_input_p))
-
-    # Collect info from transcripts input into a dictionary of each transcript
+def get_transcripts_dict(transcripts_input_p):
+    """ Collect info from transcripts input into a dictionary of each transcript"""
     transcripts = {}
     with open(transcripts_input_p) as transcripts_input:
         for row in transcripts_input:
@@ -104,6 +95,21 @@ def translate_coordinates(transcripts_input_p, queries_input_p, output_file_p, s
                 raise Exception('Duplicate transcripts provided, each transcript should be unique')
 
             transcripts[transcript_name] = {'chrom': chrom, 'start': start, 'cigar': cigar, 'orientation': orientation}
+    return transcripts
+
+
+def main(transcripts_input_p, queries_input_p, output_file_p, start_from_genomic):
+    """ Given two input files, one containing information about various transcripts and another containing information
+    regarding a requested coordinate within a transcript, output the set of translated coordinates."""
+
+    # Validate that the input file paths point to actual files
+    if not os.path.exists(transcripts_input_p):
+        raise Exception('Invalid transcripts input path provided, {} does not point to a valid file.'.format(transcripts_input_p))
+    if not os.path.exists(queries_input_p):
+        raise Exception('Invalid queries input path provided, {} does not point to a valid file.'.format(queries_input_p))
+
+    # Collect info from transcripts input into a dictionary of each transcript
+    transcripts = get_transcripts_dict(transcripts_input_p)
 
     # Read through queries input to translate each requested position into the opposite coordinate system
     with open(queries_input_p) as queries_input, open(output_file_p, 'w') as output_file:
@@ -145,4 +151,4 @@ if __name__ == '__main__':
     parser.add_argument('-g', '--start_from_genomic', action='store_true',
                         help='Optionally convert from genomic coordinate to transcript coordinate instead of the default conversion of transcript to genomic')
     args = parser.parse_args()
-    translate_coordinates(args.transcripts_input_p, args.queries_input_p, args.output_file_p, args.start_from_genomic)
+    main(args.transcripts_input_p, args.queries_input_p, args.output_file_p, args.start_from_genomic)
