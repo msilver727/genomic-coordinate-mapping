@@ -34,16 +34,22 @@ def get_converted_position(transcript_info, requested_pos, start_from_genomic=Fa
         # Use the position from the starting coordinate system as the "current position of interest"
         current_pos_of_interest = genomic_pos if start_from_genomic else transcript_pos
 
-        # Break from loop once the current position of interest is equal to or beyond the requested position in the starting coordinate system
-        if current_pos_of_interest >= requested_pos:
+        # Break from loop once the current position of interest is beyond the requested position in the starting coordinate system
+        if current_pos_of_interest > requested_pos:
             break
 
         # For either matches ('M') or mismatches ('X'), increase both the genomic position and transcript position by
         # the remaining number of bases left in the cigar segment until the requested position is reached for the starting coordinate system
         if cigar_type in ('M', 'X'):
-            bases_into_cigar = min(segment_length, requested_pos - current_pos_of_interest)
-            genomic_pos += bases_into_cigar
-            transcript_pos += bases_into_cigar
+            bases_into_segment = requested_pos - current_pos_of_interest
+            if bases_into_segment < segment_length:
+                genomic_pos += bases_into_segment
+                transcript_pos += bases_into_segment
+                # Break from the loop if the requested position is within the current segment
+                break
+            else:
+                genomic_pos += segment_length
+                transcript_pos += segment_length
 
         # For deletions ('D') or gaps ('N'), increase the genomic position by full segment length without altering the transcript position
         elif cigar_type in ('D', 'N'):
@@ -54,8 +60,8 @@ def get_converted_position(transcript_info, requested_pos, start_from_genomic=Fa
             transcript_pos += segment_length
 
         # Uncomment following print statement if needed for testing purposes
-        # print('cigar: {}{}, requested: {}, current: {}, transcript: {}, genomic: {}, bases_into_cigar: {}'.format(
-        #     segment_length, cigar_type, requested_pos, current_pos_of_interest, transcript_pos, genomic_pos, bases_into_cigar))
+        # print('cigar: {}{}, requested: {}, current: {}, transcript: {}, genomic: {}, bases_into_segment: {}'.format(
+        #     segment_length, cigar_type, requested_pos, current_pos_of_interest, transcript_pos, genomic_pos, bases_into_segment))
 
     # Return the final position in the opposite coordinate system from the starting coordinate system
     final_pos_of_interest = transcript_pos if start_from_genomic else genomic_pos
