@@ -104,7 +104,31 @@ def get_transcripts_dict(transcripts_input_p):
     return transcripts
 
 
-def main(transcripts_input_p, queries_input_p, output_file_p, start_from_genomic):
+def test_transcripts(transcripts, start_from_genomic):
+    """ Method for testing across all positions in each transcript """
+
+    # Indicate at the top which coordinate system is being converted to
+    if start_from_genomic:
+        print('Converting from genomic position to transcript position')
+    else:
+        print('Converting from transcript position to genomic position')
+
+    # Iterate through each transcript for testing
+    for transcript_name, transcript_info in transcripts.items():
+        print(transcript_name, transcript_info['orientation'])
+
+        # Get the total length for the transcript
+        parsed_cigar = cigar_pttn.findall(transcript_info['cigar'])
+        total_length = sum([int(x) for x, y in parsed_cigar])
+
+        # Print converted position across every position in the range
+        for requested_pos in range(total_length):
+            converted_pos = get_converted_position(transcript_info, requested_pos, start_from_genomic=start_from_genomic)
+            print(requested_pos, converted_pos)
+    exit()
+
+
+def main(transcripts_input_p, queries_input_p, output_file_p, start_from_genomic, testing_only):
     """ Given two input files, one containing information about various transcripts and another containing information
     regarding a requested coordinate within a transcript, output the set of translated coordinates."""
 
@@ -116,6 +140,10 @@ def main(transcripts_input_p, queries_input_p, output_file_p, start_from_genomic
 
     # Collect info from transcripts input into a dictionary of each transcript
     transcripts = get_transcripts_dict(transcripts_input_p)
+
+    # Run following method just for testing purposes if requested
+    if testing_only:
+        test_transcripts(transcripts, start_from_genomic)
 
     # Read through queries input to translate each requested position into the opposite coordinate system
     with open(queries_input_p) as queries_input, open(output_file_p, 'w') as output_file:
@@ -156,5 +184,6 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output_file_p', default='outputs/output.tsv', help='Path of the output file.')
     parser.add_argument('-g', '--start_from_genomic', action='store_true',
                         help='Optionally convert from genomic coordinate to transcript coordinate instead of the default conversion of transcript to genomic')
+    parser.add_argument('--testing', action='store_true', help='Can use this for testing')
     args = parser.parse_args()
-    main(args.transcripts_input_p, args.queries_input_p, args.output_file_p, args.start_from_genomic)
+    main(args.transcripts_input_p, args.queries_input_p, args.output_file_p, args.start_from_genomic, args.testing)
