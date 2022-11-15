@@ -125,6 +125,7 @@ def test_transcripts(transcripts, start_from_genomic):
         for requested_pos in range(total_length):
             converted_pos = get_converted_position(transcript_info, requested_pos, start_from_genomic=start_from_genomic)
             print(requested_pos, converted_pos)
+    # If only testing, exit before continuing to output to file
     exit()
 
 
