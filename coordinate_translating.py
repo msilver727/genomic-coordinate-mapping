@@ -34,16 +34,22 @@ def get_converted_position(transcript_info, requested_pos, start_from_genomic=Fa
         # Use the position from the starting coordinate system as the "current position of interest"
         current_pos_of_interest = genomic_pos if start_from_genomic else transcript_pos
 
-        # Break from loop once the current position of interest is equal to or beyond the requested position in the starting coordinate system
-        if current_pos_of_interest >= requested_pos:
+        # Break from loop once the current position of interest is beyond the requested position in the starting coordinate system
+        if current_pos_of_interest > requested_pos:
             break
 
         # For either matches ('M') or mismatches ('X'), increase both the genomic position and transcript position by
         # the remaining number of bases left in the cigar segment until the requested position is reached for the starting coordinate system
         if cigar_type in ('M', 'X'):
-            bases_into_cigar = min(segment_length, requested_pos - current_pos_of_interest)
-            genomic_pos += bases_into_cigar
-            transcript_pos += bases_into_cigar
+            bases_into_segment = requested_pos - current_pos_of_interest
+            if bases_into_segment < segment_length:
+                genomic_pos += bases_into_segment
+                transcript_pos += bases_into_segment
+                # Break from the loop if the requested position is within the current segment
+                break
+            else:
+                genomic_pos += segment_length
+                transcript_pos += segment_length
 
         # For deletions ('D') or gaps ('N'), increase the genomic position by full segment length without altering the transcript position
         elif cigar_type in ('D', 'N'):
@@ -54,25 +60,16 @@ def get_converted_position(transcript_info, requested_pos, start_from_genomic=Fa
             transcript_pos += segment_length
 
         # Uncomment following print statement if needed for testing purposes
-        # print('cigar: {}{}, requested: {}, current: {}, transcript: {}, genomic: {}, bases_into_cigar: {}'.format(
-        #     segment_length, cigar_type, requested_pos, current_pos_of_interest, transcript_pos, genomic_pos, bases_into_cigar))
+        # print('cigar: {}{}, requested: {}, current: {}, transcript: {}, genomic: {}, bases_into_segment: {}'.format(
+        #     segment_length, cigar_type, requested_pos, current_pos_of_interest, transcript_pos, genomic_pos, bases_into_segment))
 
     # Return the final position in the opposite coordinate system from the starting coordinate system
     final_pos_of_interest = transcript_pos if start_from_genomic else genomic_pos
     return final_pos_of_interest
 
 
-def translate_coordinates(transcripts_input_p, queries_input_p, output_file_p, start_from_genomic):
-    """ Given two input files, one containing information about various transcripts and another containing information
-    regarding a requested coordinate within a transcript, output the set of translated coordinates."""
-
-    # Validate that the input file paths point to actual files
-    if not os.path.exists(transcripts_input_p):
-        raise Exception('Invalid transcripts input path provided, {} does not point to a valid file.'.format(transcripts_input_p))
-    if not os.path.exists(queries_input_p):
-        raise Exception('Invalid queries input path provided, {} does not point to a valid file.'.format(queries_input_p))
-
-    # Collect info from transcripts input into a dictionary of each transcript
+def get_transcripts_dict(transcripts_input_p):
+    """ Collect info from transcripts input into a dictionary of each transcript"""
     transcripts = {}
     with open(transcripts_input_p) as transcripts_input:
         for row in transcripts_input:
@@ -104,6 +101,51 @@ def translate_coordinates(transcripts_input_p, queries_input_p, output_file_p, s
                 raise Exception('Duplicate transcripts provided, each transcript should be unique')
 
             transcripts[transcript_name] = {'chrom': chrom, 'start': start, 'cigar': cigar, 'orientation': orientation}
+    return transcripts
+
+
+def test_transcripts(transcripts, start_from_genomic):
+    """ Method for testing across all positions in each transcript """
+
+    # Indicate at the top which coordinate system is being converted to
+    if start_from_genomic:
+        print('Converting from genomic position to transcript position')
+    else:
+        print('Converting from transcript position to genomic position')
+
+    # Iterate through each transcript for testing
+    for transcript_name, transcript_info in transcripts.items():
+        print(transcript_name, transcript_info['orientation'])
+
+        # Get the total length for the transcript
+        parsed_cigar = cigar_pttn.findall(transcript_info['cigar'])
+        total_length = sum([int(x) for x, y in parsed_cigar])
+
+        # Print converted position across every position in the range
+        for requested_pos in range(total_length):
+            converted_pos = get_converted_position(transcript_info, requested_pos, start_from_genomic=start_from_genomic)
+            print(requested_pos, converted_pos)
+
+    # If only testing, exit before continuing to output to file
+    exit()
+
+
+def main(transcripts_input_p, queries_input_p, output_file_p, start_from_genomic, testing_only):
+    """ Given two input files, one containing information about various transcripts and another containing information
+    regarding a requested coordinate within a transcript, output the set of translated coordinates."""
+
+    # Validate that the input file paths point to actual files
+    if not os.path.exists(transcripts_input_p):
+        raise Exception('Invalid transcripts input path provided, {} does not point to a valid file.'.format(transcripts_input_p))
+    if not os.path.exists(queries_input_p):
+        raise Exception('Invalid queries input path provided, {} does not point to a valid file.'.format(queries_input_p))
+
+    # Collect info from transcripts input into a dictionary of each transcript
+    transcripts = get_transcripts_dict(transcripts_input_p)
+
+    # Run following method just for testing purposes if requested
+    if testing_only:
+        test_transcripts(transcripts, start_from_genomic)
 
     # Read through queries input to translate each requested position into the opposite coordinate system
     with open(queries_input_p) as queries_input, open(output_file_p, 'w') as output_file:
@@ -144,5 +186,6 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output_file_p', default='outputs/output.tsv', help='Path of the output file.')
     parser.add_argument('-g', '--start_from_genomic', action='store_true',
                         help='Optionally convert from genomic coordinate to transcript coordinate instead of the default conversion of transcript to genomic')
+    parser.add_argument('--testing', action='store_true', help='Can use this for testing')
     args = parser.parse_args()
-    translate_coordinates(args.transcripts_input_p, args.queries_input_p, args.output_file_p, args.start_from_genomic)
+    main(args.transcripts_input_p, args.queries_input_p, args.output_file_p, args.start_from_genomic, args.testing)
